@@ -67,12 +67,16 @@ def fedsgd_round(
             loss = loss_function(outputs, labels)
 
             # Scale each batch's mean loss by its number of examples.
-            batch_size = images.size(0)
-            weighted_loss = loss * batch_size / client_size
+            current_batch_size = images.size(0)
+
+            weighted_loss = (
+                loss * current_batch_size / client_size
+            )
 
             weighted_loss.backward()
 
-            total_loss += loss.item() * batch_size
+            total_loss += loss.item() * current_batch_size
+
 
         # Aggregate client gradients, weighted by client dataset size.
         with torch.no_grad():
@@ -92,13 +96,16 @@ def fedsgd_round(
         )
 
         del client_model
+    # Clip the global aggregated gradient.
+    torch.nn.utils.clip_grad_norm_(
+        aggregated_gradients,
+        max_norm=1.0,
+    )
 
-    # Apply the aggregated gradient to the global model.
+    # Apply the clipped gradient to the global model.
     with torch.no_grad():
         for parameter, gradient in zip(
             global_model.parameters(),
             aggregated_gradients,
         ):
             parameter.add_(gradient, alpha=-learning_rate)
-
-    return global_model
